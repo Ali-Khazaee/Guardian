@@ -16,6 +16,7 @@ enum TransportProtocol {
   HTTP = 4;
   DomainSocket = 5;
   HTTPUpgrade = 6;
+  SplitHTTP = 7;
 }
 
 enum DomainStrategy {
@@ -65,6 +66,13 @@ message StreamConfig {
 message ProxyConfig {
   string tag = 1;
   bool transportLayerProxy = 2;
+}
+
+message CustomSockopt {
+  string level = 1;
+  string opt = 2;
+  string value = 3;
+  string type = 4;
 }
 
 // SocketConfig is options to be applied on network sockets.
@@ -120,4 +128,6 @@ message SocketConfig {
   bool tcp_no_delay = 18;
 
   bool tcp_mptcp = 19;
+
+  repeated CustomSockopt customSockopt = 20;
 }
