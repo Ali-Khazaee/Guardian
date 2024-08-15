@@ -14,6 +14,7 @@ import (
 
 type Account struct {
 	Owner uint32
+	Type  uint32
 	Flag  uint32
 	User  uint32
 	Time  uint32
@@ -77,12 +78,14 @@ func AccountUpdate(AccountUUID uuid.UUID, AccountIP net.Addr, CounterUpload int6
 				return
 			}
 
-			_, Error = DB.Exec("UPDATE `account` SET `Traffic` = GREATEST(0, CAST(`Traffic` AS INT) - ?) WHERE `ID` = ? LIMIT 1", UsageAsMB, Cache.Owner)
+			if Cache.Type == 0 {
+				_, Error = DB.Exec("UPDATE `account` SET `Traffic` = GREATEST(0, CAST(`Traffic` AS INT) - ?) WHERE `ID` = ? LIMIT 1", UsageAsMB, Cache.Owner)
 
-			if Error != nil {
-				fmt.Println(">> AccountUpdate-Traffic-Acc:", AccountKey, Error)
+				if Error != nil {
+					fmt.Println(">> AccountUpdate-Traffic-Acc:", AccountKey, Error)
 
-				return
+					return
+				}
 			}
 
 			Cache.Trace -= (UsageAsMB * 1000000)
@@ -103,7 +106,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 	if !OK {
 		Cache = new(Account)
 
-		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
+		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Type, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
 
 		if Error != nil {
 			fmt.Println(">> AccountVerify-Error-1:", AccountKey, Error)
@@ -111,7 +114,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 			return false
 		}
 
-		Cache.Refresh = uint32(time.Now().Unix()) + 6
+		Cache.Refresh = uint32(time.Now().Unix()) + 3
 
 		Cache.UserMap = make(map[string]uint32)
 
@@ -119,7 +122,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 	}
 
 	if Cache.Refresh < uint32(time.Now().Unix()) {
-		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
+		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Type, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
 
 		if Error != nil {
 			fmt.Println(">> AccountVerify-Error-2:", AccountKey, Error)
@@ -127,11 +130,11 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 			return false
 		}
 
-		Cache.Refresh = uint32(time.Now().Unix()) + 6
+		Cache.Refresh = uint32(time.Now().Unix()) + 3
 	}
 
 	if Cache.Flag > 0 {
-		fmt.Println(">> AccountVerify-Flag:", AccountKey, Cache.Flag)
+		// fmt.Println(">> AccountVerify-Flag:", AccountKey, Cache.Flag)
 
 		return false
 	}
@@ -143,27 +146,27 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 			_, Error := DB.Exec("UPDATE `subscription` SET `Time` = ? WHERE `UUID` = ? LIMIT 1", Time, AccountKey)
 
 			if Error != nil {
-				fmt.Println(">> AccountVerify-Time:", AccountKey, Error)
+				fmt.Println(">> AccountVerify-Error-3:", AccountKey, Error)
 
 				return false
 			}
 
 			Cache.Time = Time
 		} else if Cache.Time < uint32(time.Now().Unix()) {
-			fmt.Println(">> AccountVerify-Time:", AccountKey, Cache.Time, uint32(time.Now().Unix()))
+			// fmt.Println(">> AccountVerify-Time:", AccountKey, Cache.Time, uint32(time.Now().Unix()))
 
 			return false
 		}
 	}
 
 	if Cache.Traffic < Cache.Usage {
-		fmt.Println(">> AccountVerify-Traffic:", AccountKey, Cache.Traffic, Cache.Usage)
+		// fmt.Println(">> AccountVerify-Traffic:", AccountKey, Cache.Traffic, Cache.Usage)
 
 		return false
 	}
 
 	if Cache.Allow < 750 {
-		fmt.Println(">> AccountVerify-Allow:", AccountKey, Cache.Allow)
+		// fmt.Println(">> AccountVerify-Allow:", AccountKey, Cache.Allow)
 
 		return false
 	}
@@ -174,7 +177,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 		IPCount, OK := Cache.UserMap[IP]
 
 		if !OK {
-			if len(Cache.UserMap) >= int(Cache.User) {
+			if len(Cache.UserMap) > int(Cache.User) {
 				fmt.Println(">> AccountVerify-User:", len(Cache.UserMap), Cache.User)
 
 				return false
