@@ -26,6 +26,7 @@ import (
 )
 
 type requestHandler struct {
+	config    *Config
 	host      string
 	path      string
 	ln        *Listener
@@ -75,7 +76,7 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	}
 
 	s := &httpSession{
-		uploadQueue:      NewUploadQueue(int(2 * h.ln.config.GetNormalizedMaxConcurrentUploads())),
+		uploadQueue:      NewUploadQueue(int(h.ln.config.GetNormalizedScMaxConcurrentPosts().To)),
 		isFullyConnected: done.New(),
 	}
 
@@ -122,6 +123,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	currentSession := h.upsertSession(sessionId)
+	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 
 	if request.Method == "POST" {
 		seq := ""
@@ -136,6 +138,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		payload, err := io.ReadAll(request.Body)
+
+		if len(payload) > scMaxEachPostBytes {
+			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request had size ", len(payload), ". Adjust scMaxEachPostBytes on the server to be at least as large as client.")
+			writer.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to upload")
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -160,6 +169,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			return
 		}
 
+		h.config.WriteResponseHeader(writer)
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" {
 		responseFlusher, ok := writer.(http.Flusher)
@@ -174,14 +184,27 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		// magic header instructs nginx + apache to not buffer response body
 		writer.Header().Set("X-Accel-Buffering", "no")
-		// magic header to make the HTTP middle box consider this as SSE to disable buffer
-		writer.Header().Set("Content-Type", "text/event-stream")
+		// A web-compliant header telling all middleboxes to disable caching.
+		// Should be able to prevent overloading the cache, or stop CDNs from
+		// teeing the response stream into their cache, causing slowdowns.
+		writer.Header().Set("Cache-Control", "no-store")
+		if !h.config.NoSSEHeader {
+			// magic header to make the HTTP middle box consider this as SSE to disable buffer
+			writer.Header().Set("Content-Type", "text/event-stream")
+		}
+
+		h.config.WriteResponseHeader(writer)
 
 		writer.WriteHeader(http.StatusOK)
-		// send a chunk immediately to enable CDN streaming.
-		// many CDN buffer the response headers until the origin starts sending
-		// the body, with no way to turn it off.
-		writer.Write([]byte("ok"))
+		if _, ok := request.URL.Query()["x_padding"]; !ok {
+			// in earlier versions, this initial body data was used to immediately
+			// start a 200 OK on all CDN. but xray client since 1.8.16 does not
+			// actually require an immediate 200 OK, but now requires these
+			// additional bytes "ok". xray client 1.8.24+ doesn't require "ok"
+			// anymore, and so this line should be removed in later versions.
+			writer.Write([]byte("ok"))
+		}
+
 		responseFlusher.Flush()
 
 		downloadDone := done.New()
@@ -259,6 +282,7 @@ func ListenSH(ctx context.Context, address net.Address, port net.Port, streamSet
 	var err error
 	var localAddr = gonet.TCPAddr{}
 	handler := &requestHandler{
+		config:    shSettings,
 		host:      shSettings.Host,
 		path:      shSettings.GetNormalizedPath(),
 		ln:        l,

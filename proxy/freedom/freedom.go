@@ -28,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 var useSplice bool
@@ -225,9 +226,16 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writeConn = inbound.Conn
 				inTimer = inbound.Timer
 			}
-			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			if !isTLSConn(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
+				return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			}
 		}
-		reader := NewPacketReader(conn, UDPOverride)
+		var reader buf.Reader
+		if destination.Network == net.Network_TCP {
+			reader = buf.NewReader(conn)
+		} else {
+			reader = NewPacketReader(conn, UDPOverride)
+		}
 		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
 		}
@@ -243,6 +251,19 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	return nil
+}
+
+func isTLSConn(conn stat.Connection) bool {
+	if conn != nil {
+		statConn, ok := conn.(*stat.CounterConnection)
+		if ok {
+			conn = statConn.Connection
+		}
+		if _, ok := conn.(*tls.Conn); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func NewPacketReader(conn net.Conn, UDPOverride net.Destination) buf.Reader {
@@ -381,6 +402,7 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 		}
 		data := b[5:recordLen]
 		buf := make([]byte, 1024)
+		var hello []byte
 		for from := 0; ; {
 			to := from + int(randBetween(int64(f.fragment.LengthMin), int64(f.fragment.LengthMax)))
 			if to > len(data) {
@@ -392,12 +414,22 @@ func (f *FragmentWriter) Write(b []byte) (int, error) {
 			from = to
 			buf[3] = byte(l >> 8)
 			buf[4] = byte(l)
-			_, err := f.writer.Write(buf[:5+l])
-			time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
-			if err != nil {
-				return 0, err
+			if f.fragment.IntervalMax == 0 { // combine fragmented tlshello if interval is 0
+				hello = append(hello, buf[:5+l]...)
+			} else {
+				_, err := f.writer.Write(buf[:5+l])
+				time.Sleep(time.Duration(randBetween(int64(f.fragment.IntervalMin), int64(f.fragment.IntervalMax))) * time.Millisecond)
+				if err != nil {
+					return 0, err
+				}
 			}
 			if from == len(data) {
+				if len(hello) > 0 {
+					_, err := f.writer.Write(hello)
+					if err != nil {
+						return 0, err
+					}
+				}
 				if len(b) > recordLen {
 					n, err := f.writer.Write(b[recordLen:])
 					if err != nil {

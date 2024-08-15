@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	gotls "crypto/tls"
 	"fmt"
+	"io"
 	gonet "net"
 	"net/http"
 	"runtime"
@@ -60,7 +61,7 @@ func Test_listenSHAndDial(t *testing.T) {
 
 	var b [1024]byte
 	fmt.Println("test2")
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -72,7 +73,7 @@ func Test_listenSHAndDial(t *testing.T) {
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
-	n, _ = conn.Read(b[:])
+	n, _ = io.ReadFull(conn, b[:])
 	common.Must(err)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -116,7 +117,7 @@ func TestDialWithRemoteAddr(t *testing.T) {
 	common.Must(err)
 
 	var b [1024]byte
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	if string(b[:n]) != "1.1.1.1:0" {
 		t.Error("response: ", string(b[:n]))
 	}
@@ -168,7 +169,7 @@ func Test_listenSHAndDial_TLS(t *testing.T) {
 	common.Must(err)
 
 	var b [1024]byte
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
 	}
@@ -339,7 +340,7 @@ func Test_listenSHAndDial_Unix(t *testing.T) {
 
 	var b [1024]byte
 	fmt.Println("test2")
-	n, _ := conn.Read(b[:])
+	n, _ := io.ReadFull(conn, b[:])
 	fmt.Println("string is", n)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
@@ -351,12 +352,58 @@ func Test_listenSHAndDial_Unix(t *testing.T) {
 	common.Must(err)
 	_, err = conn.Write([]byte("Test connection 2"))
 	common.Must(err)
-	n, _ = conn.Read(b[:])
+	n, _ = io.ReadFull(conn, b[:])
 	common.Must(err)
 	if string(b[:n]) != "Response" {
 		t.Error("response: ", string(b[:n]))
 	}
 	common.Must(conn.Close())
 
+	common.Must(listen.Close())
+}
+
+func Test_queryString(t *testing.T) {
+	listenPort := tcp.PickPort()
+	listen, err := ListenSH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			// this querystring does not have any effect, but sometimes people blindly copy it from websocket config. make sure the outbound doesn't break
+			Path: "/sh?ed=2048",
+		},
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+
+			var b [1024]byte
+			c.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_, err := c.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			common.Must2(c.Write([]byte("Response")))
+		}(conn)
+	})
+	common.Must(err)
+	ctx := context.Background()
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "sh"},
+	}
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+
+	common.Must(err)
+	_, err = conn.Write([]byte("Test connection 1"))
+	common.Must(err)
+
+	var b [1024]byte
+	fmt.Println("test2")
+	n, _ := io.ReadFull(conn, b[:])
+	fmt.Println("string is", n)
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
+
+	common.Must(conn.Close())
 	common.Must(listen.Close())
 }
