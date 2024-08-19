@@ -106,7 +106,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 	if !OK {
 		Cache = new(Account)
 
-		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Type, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
+		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Type`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Type, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
 
 		if Error != nil {
 			fmt.Println(">> AccountVerify-Error-1:", AccountKey, Error)
@@ -122,7 +122,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 	}
 
 	if Cache.Refresh < uint32(time.Now().Unix()) {
-		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Type, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
+		Error := DB.QueryRow("SELECT `subscription`.`Owner`, `subscription`.`Type`, `subscription`.`Flag`, `subscription`.`User`, `subscription`.`Time`, `subscription`.`Traffic`, `subscription`.`Usage`, `account`.`Traffic` AS `Allow` FROM `subscription` INNER JOIN `account` ON `subscription`.`Owner` = `account`.`ID` WHERE `UUID` = ? LIMIT 1;", AccountKey).Scan(&Cache.Owner, &Cache.Type, &Cache.Flag, &Cache.User, &Cache.Time, &Cache.Traffic, &Cache.Usage, &Cache.Allow)
 
 		if Error != nil {
 			fmt.Println(">> AccountVerify-Error-2:", AccountKey, Error)
