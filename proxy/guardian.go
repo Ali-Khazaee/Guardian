@@ -165,7 +165,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 		return false
 	}
 
-	if Cache.Allow < 750 {
+	if Cache.Type == 0 && Cache.Allow < 750 {
 		// fmt.Println(">> AccountVerify-Allow:", AccountKey, Cache.Allow)
 
 		return false
@@ -178,7 +178,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 
 		if !OK {
 			if len(Cache.UserMap) > int(Cache.User) {
-				fmt.Println(">> AccountVerify-User:", len(Cache.UserMap), Cache.User)
+				fmt.Println(">> AccountVerify-User:", AccountKey, len(Cache.UserMap), Cache.User)
 
 				return false
 			}
