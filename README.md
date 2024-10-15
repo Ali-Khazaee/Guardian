@@ -35,6 +35,7 @@
 - Web Panel
   - [3X-UI](https://github.com/MHSanaei/3x-ui), [X-UI](https://github.com/alireza0/x-ui), [Xray-UI](https://github.com/qist/xray-ui)
   - [Hiddify](https://github.com/hiddify/hiddify-config)
+  - [Marzneshin](https://github.com/marzneshin/marzneshin)
   - [Marzban](https://github.com/Gozargah/Marzban)
   - [Libertea](https://github.com/VZiChoushaDui/Libertea)
 - One Click
@@ -77,6 +78,7 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
+  - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
 - iOS & macOS arm64
   - [FoXray](https://apps.apple.com/app/foxray/id6448898396)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
