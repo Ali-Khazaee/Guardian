@@ -178,7 +178,7 @@ func AccountVerify(AccountUUID uuid.UUID, AccountIP net.Addr) bool {
 
 		if !OK {
 			if len(Cache.UserMap) > int(Cache.User) {
-				fmt.Println(">> AccountVerify-User:", AccountKey, len(Cache.UserMap), Cache.User)
+				// fmt.Println(">> AccountVerify-User:", AccountKey, len(Cache.UserMap), Cache.User)
 
 				return false
 			}
